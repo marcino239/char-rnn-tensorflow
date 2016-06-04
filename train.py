@@ -28,6 +28,8 @@ def main():
                        help='RNN sequence length')
     parser.add_argument('--num_epochs', type=int, default=50,
                        help='number of epochs')
+    parser.add_argument('--stats_file_name', type=str, default='',
+                       help='stats file name')
     parser.add_argument('--save_every', type=int, default=1000,
                        help='save frequency')
     parser.add_argument('--grad_clip', type=float, default=5.,
@@ -81,6 +83,8 @@ def train(args):
         
     model = Model(args)
 
+    stats_data = { 'mini_batch': [], 'epochs': [], 'train_losses': [], 'time_per_batch': [] }
+
     with tf.Session() as sess:
         tf.initialize_all_variables().run()
         saver = tf.train.Saver(tf.all_variables())
@@ -97,15 +101,27 @@ def train(args):
                 feed = {model.input_data: x, model.targets: y, model.initial_state: state}
                 train_loss, state, _ = sess.run([model.cost, model.final_state, model.train_op], feed)
                 end = time.time()
+
+                stats_data[ 'epochs' ].append( e * data_loader.num_batches + b )
+                stats_data[ 'epochs' ].append( e )
+                stats_data[ 'train_losses' ].append( train_loss )
+                stats_data[ 'time_per_batch' ].append( end - start )
+
                 print("{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
                     .format(e * data_loader.num_batches + b,
                             args.num_epochs * data_loader.num_batches,
-                            e, train_loss, end - start))
+                            e, train_loss, end - start) )
+
                 if (e * data_loader.num_batches + b) % args.save_every == 0\
                     or (e==args.num_epochs-1 and b == data_loader.num_batches-1): # save for the last result
                     checkpoint_path = os.path.join(args.save_dir, 'model.ckpt')
                     saver.save(sess, checkpoint_path, global_step = e * data_loader.num_batches + b)
                     print("model saved to {}".format(checkpoint_path))
+
+
+    if args.stats_file_name != '':
+        print( 'saving stats: {0}'.format( args.stats_file_name ) )
+        cPickle.dump( stats_data, open( args.stats_file_name, 'wb' ) )
 
 if __name__ == '__main__':
     main()
